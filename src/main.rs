@@ -224,7 +224,7 @@ impl App for MusicApp {
             }
             Message::GoToSearch => {
                 self.switch_mode(AppMode::SearchInput, win);
-                self.keyword = String::new();
+                self.input_clear(win);
             },
             Message::GoToSearchBrowse => {
                 self.switch_mode(AppMode::SearchBrowse, win);
