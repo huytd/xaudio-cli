@@ -51,29 +51,29 @@ impl Display for AppMode {
 }
 
 struct MusicApp {
+    mode: AppMode,
     playing_list: Vec<SearchEntry>,
     search_results: Vec<SearchEntry>,
     current_page: usize,
     page_display_size: usize,
     selected_index: usize,
     keyword: String,
-    mode: AppMode,
+    loading: bool,
     subscriber: Sender<Command>,
-    loading: bool
 }
 
 impl MusicApp {
     pub fn new(tx: Sender<Command>) -> Self {
         Self {
+            mode: AppMode::Playing,
             playing_list: vec![],
             search_results: vec![],
-            selected_index: 0,
             current_page: 0,
             page_display_size: 0,
+            selected_index: 0,
             keyword: String::new(),
-            mode: AppMode::Playing,
+            loading: false,
             subscriber: tx,
-            loading: false
         }
     }
 
