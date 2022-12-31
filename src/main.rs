@@ -98,42 +98,6 @@ impl MusicApp {
         self.keyword.clear();
     }
 
-    fn input_mode_playing(&mut self, input: Input, win: &Window) -> Message {
-        return match input {
-            Input::Character('/') => Message::GoToSearch,
-            Input::Character(TAB_KEY) => Message::GoToSearchBrowse,
-            Input::Character('j') => Message::NextItem,
-            Input::Character('k') => Message::PrevItem,
-            Input::Character('x') => Message::RemoveSong,
-            Input::Character('>') => Message::NextPage,
-            Input::Character('<') => Message::PrevPage,
-            _ => Message::None
-        }
-    }
-
-    fn input_mode_search_input(&mut self, input: Input, win: &Window) -> Message {
-        return match input {
-            Input::Character(ESCAPE_KEY) => Message::GoToPlaylist,
-            Input::Character(BACKSPACE_KEY) => Message::DeleteText,
-            Input::Character(ENTER_KEY) => Message::SearchSong,
-            Input::Character(ch) => Message::InputText(ch),
-            _ => Message::None
-        }
-    }
-
-    fn input_mode_search_browse(&mut self, input: Input, win: &Window) -> Message {
-        return match input {
-            Input::Character(ESCAPE_KEY) | Input::Character('q') => Message::GoToPlaylist,
-            Input::Character('/') => Message::GoToSearch,
-            Input::Character('>') => Message::NextPage,
-            Input::Character('<') => Message::PrevPage,
-            Input::Character('j') => Message::NextItem,
-            Input::Character('k') => Message::PrevItem,
-            Input::Character(ENTER_KEY) => Message::AddSelectedToPlaylist,
-            _ => Message::None
-        }
-    }
-
     fn draw_base_ui(&self, win: &Window) {
         let (screen_height, screen_width) = win.get_max_yx();
         let horizontal_line = std::iter::repeat(HORIZONTAL).take(screen_width as usize).collect::<String>();
@@ -281,16 +245,40 @@ impl App for MusicApp {
         return true;
     }
 
-    fn input(&mut self, input: Input, win: &Window) -> Self::Msg {
+    fn input(&mut self, input: Input) -> Self::Msg {
         match self.mode {
             AppMode::Playing => {
-                return self.input_mode_playing(input, win);
+                return match input {
+                    Input::Character('/') => Message::GoToSearch,
+                    Input::Character(TAB_KEY) => Message::GoToSearchBrowse,
+                    Input::Character('j') => Message::NextItem,
+                    Input::Character('k') => Message::PrevItem,
+                    Input::Character('x') => Message::RemoveSong,
+                    Input::Character('>') => Message::NextPage,
+                    Input::Character('<') => Message::PrevPage,
+                    _ => Message::None
+                }
             },
             AppMode::SearchInput => {
-                return self.input_mode_search_input(input, win);
+                return match input {
+                    Input::Character(ESCAPE_KEY) => Message::GoToPlaylist,
+                    Input::Character(BACKSPACE_KEY) => Message::DeleteText,
+                    Input::Character(ENTER_KEY) => Message::SearchSong,
+                    Input::Character(ch) => Message::InputText(ch),
+                    _ => Message::None
+                }
             },
             AppMode::SearchBrowse => {
-                return self.input_mode_search_browse(input, win);
+                return match input {
+                    Input::Character(ESCAPE_KEY) | Input::Character('q') => Message::GoToPlaylist,
+                    Input::Character('/') => Message::GoToSearch,
+                    Input::Character('>') => Message::NextPage,
+                    Input::Character('<') => Message::PrevPage,
+                    Input::Character('j') => Message::NextItem,
+                    Input::Character('k') => Message::PrevItem,
+                    Input::Character(ENTER_KEY) => Message::AddSelectedToPlaylist,
+                    _ => Message::None
+                }
             }
         }
     }
@@ -324,10 +312,8 @@ async fn runtime(mut rx: Receiver<Command>, tx: Sender<Message>) {
     while let Some(msg) = rx.recv().await {
         match msg {
             Command::Search(keyword) => {
-                if !keyword.is_empty() {
-                    if let Ok(results) = youtube::search_song(&keyword).await {
-                        _ = tx.send(Message::DisplaySearchResult(results)).await;
-                    }
+                if let Ok(results) = youtube::search_song(&keyword).await {
+                    _ = tx.send(Message::DisplaySearchResult(results)).await;
                 }
             },
             _ => {}

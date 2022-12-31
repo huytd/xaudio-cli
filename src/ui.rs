@@ -8,7 +8,7 @@ pub trait App {
     type Msg;
     fn init(&mut self, win: &Window);
     fn update(&mut self, win: &Window, msg: Self::Msg) -> bool;
-    fn input(&mut self, input: Input, win: &Window) -> Self::Msg;
+    fn input(&mut self, input: Input) -> Self::Msg;
     fn render(&self, win: &Window);
 }
 
@@ -36,7 +36,7 @@ pub fn run<T>(app: impl App + App<Msg = T>, raw_mode: bool, mut rx: Receiver<T>)
         app.render(&window);
         match window.getch() {
             Some(input) => {
-                let msg = app.input(input, &window);
+                let msg = app.input(input);
                 if !app.update(&window, msg) {
                     break;
                 }
