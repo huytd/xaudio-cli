@@ -18,9 +18,23 @@ enum Command {
 
 #[derive(Debug)]
 enum Message {
-    SearchResult(Vec<SearchEntry>),
+    GoToSearch,
+    GoToSearchBrowse,
+    GoToPlaylist,
+    SearchSong,
+    AddSelectedToPlaylist,
+    RemoveSong,
+    NextItem,
+    PrevItem,
+    NextPage,
+    PrevPage,
+    InputText(char),
+    DeleteText,
+    DisplaySearchResult(Vec<SearchEntry>),
+    None
 }
 
+#[derive(PartialEq, Eq)]
 enum AppMode {
     Playing,
     SearchInput,
@@ -38,11 +52,10 @@ impl Display for AppMode {
 
 struct MusicApp {
     playing_list: Vec<SearchEntry>,
-    playing_page: usize,
     search_results: Vec<SearchEntry>,
-    search_page: usize,
-    selected_index: usize,
+    current_page: usize,
     page_display_size: usize,
+    selected_index: usize,
     keyword: String,
     mode: AppMode,
     subscriber: Sender<Command>,
@@ -53,11 +66,10 @@ impl MusicApp {
     pub fn new(tx: Sender<Command>) -> Self {
         Self {
             playing_list: vec![],
-            playing_page: 0,
-            search_page: 0,
-            selected_index: 0,
-            page_display_size: 0,
             search_results: vec![],
+            selected_index: 0,
+            current_page: 0,
+            page_display_size: 0,
             keyword: String::new(),
             mode: AppMode::Playing,
             subscriber: tx,
@@ -67,8 +79,9 @@ impl MusicApp {
 
     fn switch_mode(&mut self, mode: AppMode, win: &Window) {
         self.mode = mode;
-        win.clear();
         self.selected_index = 0;
+        self.current_page = 0;
+        win.clear();
     }
 
     fn input_pop_last(&mut self, win: &Window) {
@@ -85,104 +98,39 @@ impl MusicApp {
         self.keyword.clear();
     }
 
-    fn input_mode_playing(&mut self, input: Input, win: &Window) {
-        match input {
-            Input::Character('/') => {
-                self.switch_mode(AppMode::SearchInput, win);
-                self.keyword = String::new();
-            }
-            Input::Character(TAB_KEY) => {
-                self.switch_mode(AppMode::SearchBrowse, win);
-            }
-            Input::Character('j') => {
-                if self.selected_index < self.page_display_size - 1 {
-                    self.selected_index += 1;
-                }
-            }
-            Input::Character('k') => {
-                if self.selected_index > 0 {
-                    self.selected_index -= 1;
-                }
-            }
-            Input::Character('x') => {
-                self.playing_list.remove(self.selected_index);
-            }
-            Input::Character('>') => {
-                let total_pages = get_total_pages(self.playing_list.len(),self.page_display_size);
-                if self.playing_page < total_pages - 1 {
-                    self.playing_page += 1;
-                }
-                self.selected_index = 0;
-            }
-            Input::Character('<') => {
-                if self.playing_page > 0 {
-                    self.playing_page -= 1;
-                }
-                self.selected_index = 0;
-            }
-            _ => {}
+    fn input_mode_playing(&mut self, input: Input, win: &Window) -> Message {
+        return match input {
+            Input::Character('/') => Message::GoToSearch,
+            Input::Character(TAB_KEY) => Message::GoToSearchBrowse,
+            Input::Character('j') => Message::NextItem,
+            Input::Character('k') => Message::PrevItem,
+            Input::Character('x') => Message::RemoveSong,
+            Input::Character('>') => Message::NextPage,
+            Input::Character('<') => Message::PrevPage,
+            _ => Message::None
         }
     }
 
-    fn input_mode_search_input(&mut self, input: Input, win: &Window) {
-        match input {
-            Input::Character(ESCAPE_KEY) => {
-                self.switch_mode(AppMode::Playing, win);
-            }
-            Input::Character(BACKSPACE_KEY) => {
-                self.input_pop_last(win);
-            }
-            Input::Character(ENTER_KEY) => {
-                if self.keyword.trim().len() > 0 {
-                    _ = self.subscriber.try_send(Command::Search(self.keyword.clone()));
-                    self.loading = true;
-                }
-            }
-            Input::Character(ch) => {
-                self.keyword.push(ch);
-            }
-            _ => {}
+    fn input_mode_search_input(&mut self, input: Input, win: &Window) -> Message {
+        return match input {
+            Input::Character(ESCAPE_KEY) => Message::GoToPlaylist,
+            Input::Character(BACKSPACE_KEY) => Message::DeleteText,
+            Input::Character(ENTER_KEY) => Message::SearchSong,
+            Input::Character(ch) => Message::InputText(ch),
+            _ => Message::None
         }
     }
 
-    fn input_mode_search_browse(&mut self, input: Input, win: &Window) {
-        match input {
-            Input::Character(ESCAPE_KEY) | Input::Character('q') => {
-                self.switch_mode(AppMode::Playing, win);
-            }
-            Input::Character('/') => {
-                self.switch_mode(AppMode::SearchInput, win);
-                self.input_clear(win);
-            }
-            Input::Character('>') => {
-                let total_pages = get_total_pages(self.search_results.len(),self.page_display_size);
-                if self.search_page < total_pages - 1 {
-                    self.search_page += 1;
-                }
-                self.selected_index = 0;
-            }
-            Input::Character('<') => {
-                if self.search_page > 0 {
-                    self.search_page -= 1;
-                }
-                self.selected_index = 0;
-            }
-            Input::Character('j') => {
-                if self.selected_index < self.page_display_size - 1 {
-                    self.selected_index += 1;
-                }
-            }
-            Input::Character('k') => {
-                if self.selected_index > 0 {
-                    self.selected_index -= 1;
-                }
-            }
-            Input::Character(ENTER_KEY) => {
-                let selected_index = self.selected_index + self.search_page * self.page_display_size;
-                let song = &self.search_results[selected_index];
-                self.playing_list.push(song.to_owned());
-            }
-            _ => {}
+    fn input_mode_search_browse(&mut self, input: Input, win: &Window) -> Message {
+        return match input {
+            Input::Character(ESCAPE_KEY) | Input::Character('q') => Message::GoToPlaylist,
+            Input::Character('/') => Message::GoToSearch,
+            Input::Character('>') => Message::NextPage,
+            Input::Character('<') => Message::PrevPage,
+            Input::Character('j') => Message::NextItem,
+            Input::Character('k') => Message::PrevItem,
+            Input::Character(ENTER_KEY) => Message::AddSelectedToPlaylist,
+            _ => Message::None
         }
     }
 
@@ -222,11 +170,11 @@ impl MusicApp {
         win.printw("[j/k] Up/Down    [<] Previous page    [>] Next page    [/] Search");
     }
 
-    fn draw_list(&self, list: &[SearchEntry], exclude_list: &[SearchEntry], current_page: usize, selected_index: usize, win: &Window) {
+    fn draw_list(&self, list: &[SearchEntry], exclude_list: &[SearchEntry], win: &Window) {
         let excluded_ids = exclude_list.iter().map(|entry| entry.id.to_owned()).collect::<HashSet<String>>();
         let (_, screen_width) = win.get_max_yx();
         let total_pages = get_total_pages(list.len(),self.page_display_size);
-        let page = paginate(&list, current_page, self.page_display_size);
+        let page = paginate(&list, self.current_page, self.page_display_size);
 
         // clear previous list
         for i in 0..=self.page_display_size as i32 {
@@ -234,24 +182,23 @@ impl MusicApp {
             win.clrtoeol();
         }
 
-        win.mv(2, 0);
         // draw the list
+        win.mv(2, 0);
         if let Some(page) = page {
             for (i, item) in page.iter().enumerate() {
                 let mut attr_flag = pancurses::A_NORMAL;
-                if selected_index == i {
+                if self.selected_index == i {
                     attr_flag |= pancurses::A_REVERSE;
                 }
                 if excluded_ids.contains(&item.id) {
                     attr_flag |= pancurses::COLOR_PAIR(1);
                 }
                 win.attron(attr_flag);
-                win.printw(format!("{}. {}\n", i + 1 + current_page * self.page_display_size, truncate(&item.title, screen_width as usize - TITLE_PADDING)));
+                win.printw(format!("{}. {}\n", i + 1 + self.current_page * self.page_display_size, truncate(&item.title, screen_width as usize - TITLE_PADDING)));
                 win.attroff(attr_flag);
             }
-            win.printw(format!("Page: {}/{}\n", current_page + 1, total_pages));
+            win.printw(format!("Page: {}/{}\n", self.current_page + 1, total_pages));
         } else {
-            win.mv(2, 0);
             win.printw("Nothing to show. Hit search and add something here.");
         }
     }
@@ -268,21 +215,84 @@ impl App for MusicApp {
         init_pair(1, COLOR_BLUE, 0);
     }
 
-    fn update(&mut self, _: &Window) {}
-
-    fn input(&mut self, input: Input, win: &Window) -> bool {
-        match self.mode {
-            AppMode::Playing => {
-                self.input_mode_playing(input, win);
-            },
-            AppMode::SearchInput => {
-                self.input_mode_search_input(input, win);
-            },
-            AppMode::SearchBrowse => {
-                self.input_mode_search_browse(input, win);
+    fn update(&mut self, win: &Window, msg: Self::Msg) -> bool {
+        match msg {
+            Message::DisplaySearchResult(result) => {
+                self.search_results = result;
+                self.switch_mode(AppMode::SearchBrowse, win);
+                self.loading = false;
             }
+            Message::GoToSearch => {
+                self.switch_mode(AppMode::SearchInput, win);
+                self.keyword = String::new();
+            },
+            Message::GoToSearchBrowse => {
+                self.switch_mode(AppMode::SearchBrowse, win);
+            },
+            Message::GoToPlaylist => {
+                self.switch_mode(AppMode::Playing, win);
+            },
+            Message::SearchSong => {
+                if self.keyword.trim().len() > 0 {
+                    _ = self.subscriber.try_send(Command::Search(self.keyword.clone()));
+                    self.loading = true;
+                }
+            },
+            Message::AddSelectedToPlaylist => {
+                let selected_index = self.selected_index + self.current_page * self.page_display_size;
+                let song = &self.search_results[selected_index];
+                self.playing_list.push(song.to_owned());
+            },
+            Message::RemoveSong => {
+                self.playing_list.remove(self.selected_index);
+            },
+            Message::NextPage => {
+                let list_len = if self.mode == AppMode::Playing { self.playing_list.len() } else { self.search_results.len() };
+                let total_pages = get_total_pages(list_len, self.page_display_size);
+                if self.current_page < total_pages - 1 {
+                    self.current_page += 1;
+                }
+                self.selected_index = 0;
+            },
+            Message::PrevPage => {
+                if self.current_page > 0 {
+                    self.current_page -= 1;
+                }
+                self.selected_index = 0;
+            },
+            Message::NextItem => {
+                if self.selected_index < self.page_display_size - 1 {
+                    self.selected_index += 1;
+                }
+            },
+            Message::PrevItem => {
+                if self.selected_index > 0 {
+                    self.selected_index -= 1;
+                }
+            },
+            Message::InputText(ch) => {
+                self.keyword.push(ch);
+            },
+            Message::DeleteText => {
+                self.input_pop_last(win);
+            },
+            Message::None => {},
         }
         return true;
+    }
+
+    fn input(&mut self, input: Input, win: &Window) -> Self::Msg {
+        match self.mode {
+            AppMode::Playing => {
+                return self.input_mode_playing(input, win);
+            },
+            AppMode::SearchInput => {
+                return self.input_mode_search_input(input, win);
+            },
+            AppMode::SearchBrowse => {
+                return self.input_mode_search_browse(input, win);
+            }
+        }
     }
 
     fn render(&self, win: &Window) {
@@ -303,20 +313,10 @@ impl App for MusicApp {
         }
 
         if let AppMode::Playing = self.mode {
-            self.draw_list(&self.playing_list, &[], self.playing_page, self.selected_index, win);
+            self.draw_list(&self.playing_list, &[], win);
         } else {
-            self.draw_list(&self.search_results, &self.playing_list, self.search_page, self.selected_index, win);
+            self.draw_list(&self.search_results, &self.playing_list, win);
         }
-    }
-
-    fn subscription(&mut self, msg: Self::Msg) {
-        match msg {
-            Message::SearchResult(result) => {
-                self.search_results = result;
-                self.mode = AppMode::SearchBrowse;
-            }
-        }
-        self.loading = false;
     }
 }
 
@@ -326,7 +326,7 @@ async fn runtime(mut rx: Receiver<Command>, tx: Sender<Message>) {
             Command::Search(keyword) => {
                 if !keyword.is_empty() {
                     if let Ok(results) = youtube::search_song(&keyword).await {
-                        _ = tx.send(Message::SearchResult(results)).await;
+                        _ = tx.send(Message::DisplaySearchResult(results)).await;
                     }
                 }
             },

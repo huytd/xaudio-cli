@@ -7,10 +7,9 @@ use tokio::sync::mpsc::Receiver;
 pub trait App {
     type Msg;
     fn init(&mut self, win: &Window);
-    fn update(&mut self, win: &Window);
-    fn input(&mut self, input: Input, win: &Window) -> bool;
+    fn update(&mut self, win: &Window, msg: Self::Msg) -> bool;
+    fn input(&mut self, input: Input, win: &Window) -> Self::Msg;
     fn render(&self, win: &Window);
-    fn subscription(&mut self, msg: Self::Msg);
 }
 
 pub fn run<T>(app: impl App + App<Msg = T>, raw_mode: bool, mut rx: Receiver<T>) {
@@ -34,18 +33,18 @@ pub fn run<T>(app: impl App + App<Msg = T>, raw_mode: bool, mut rx: Receiver<T>)
     app.init(&window);
 
     loop {
-        app.update(&window);
         app.render(&window);
         match window.getch() {
             Some(input) => {
-                if !app.input(input, &window) {
+                let msg = app.input(input, &window);
+                if !app.update(&window, msg) {
                     break;
                 }
             }
             None => (),
         }
         while let Ok(msg) = rx.try_recv() {
-            app.subscription(msg);
+            app.update(&window, msg);
         }
     }
 
