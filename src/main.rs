@@ -1,11 +1,13 @@
 mod youtube;
 mod ui;
+mod mpv;
 
-use std::{io::Result, fmt::Display, collections::HashSet};
+use std::{io::Result, fmt::Display, collections::HashSet, process::Stdio, thread, time::Duration};
 use box_drawing::light::HORIZONTAL;
 use dotenv::dotenv;
+use mpv::MpvClient;
 use pancurses::{Window, Input, COLOR_BLUE, init_pair, COLOR_WHITE};
-use tokio::sync::mpsc::{Receiver, Sender};
+use tokio::{sync::mpsc::{Receiver, Sender}, select};
 use ui::{App, run};
 use xaudio_cli::{ESCAPE_KEY, truncate, TITLE_PADDING, TAB_KEY, BACKSPACE_KEY, ENTER_KEY, get_total_pages, paginate};
 use youtube::SearchEntry;
@@ -22,6 +24,7 @@ enum Message {
     GoToSearchBrowse,
     GoToPlaylist,
     SearchSong,
+    PlaySelected,
     AddSelectedToPlaylist,
     RemoveSong,
     NextItem,
@@ -241,6 +244,9 @@ impl App for MusicApp {
                 self.input_pop_last(win);
             },
             Message::None => {},
+            Message::PlaySelected => {
+                _ = self.subscriber.try_send(Command::Play(self.keyword.clone()));
+            },
         }
         return true;
     }
@@ -249,6 +255,7 @@ impl App for MusicApp {
         match self.mode {
             AppMode::Playing => {
                 return match input {
+                    Input::Character(ENTER_KEY) => Message::PlaySelected,
                     Input::Character('/') => Message::GoToSearch,
                     Input::Character(TAB_KEY) => Message::GoToSearchBrowse,
                     Input::Character('j') => Message::NextItem,
@@ -309,14 +316,29 @@ impl App for MusicApp {
 }
 
 async fn runtime(mut rx: Receiver<Command>, tx: Sender<Message>) {
-    while let Some(msg) = rx.recv().await {
-        match msg {
-            Command::Search(keyword) => {
-                if let Ok(results) = youtube::search_song(&keyword).await {
-                    _ = tx.send(Message::DisplaySearchResult(results)).await;
+    let mut mpv = MpvClient::new().await;
+    loop {
+        select! {
+            app_command = rx.recv() => {
+                if let Some(msg) = app_command {
+                    match msg {
+                        Command::Search(keyword) => {
+                            if let Ok(results) = youtube::search_song(&keyword).await {
+                                _ = tx.send(Message::DisplaySearchResult(results)).await;
+                            }
+                        }
+                        Command::Play(_) => {
+                            mpv.load_song("https://www.youtube.com/watch?v=CD-E-LDc384").await;
+                            mpv.play().await;
+                        }
+                    }
                 }
             },
-            _ => {}
+            mpv_event = mpv.recv() => {
+                if let Ok(event) = mpv_event {
+                    println!("EVENT: {:?}", event);
+                }
+            }
         }
     }
 }
@@ -324,6 +346,10 @@ async fn runtime(mut rx: Receiver<Command>, tx: Sender<Message>) {
 #[tokio::main]
 async fn main() -> Result<()> {
     dotenv().ok();
+    tokio::spawn(async move {
+        MpvClient::start_server().await;
+    });
+    thread::sleep(Duration::from_millis(500));
     let (cmd_tx, cmd_rx) = tokio::sync::mpsc::channel::<Command>(1);
     let (msg_tx, msg_rx) = tokio::sync::mpsc::channel::<Message>(1);
     let app = MusicApp::new(cmd_tx);
