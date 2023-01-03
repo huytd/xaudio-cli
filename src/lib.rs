@@ -1,3 +1,5 @@
+use std::time::Duration;
+
 pub const BACKSPACE_KEY: char = '\u{7f}';
 pub const ESCAPE_KEY: char = '\u{1b}';
 pub const ENTER_KEY: char = '\n';
@@ -28,4 +30,11 @@ pub fn paginate<'a, T>(list: &'a [T], page: usize, page_size: usize) -> Option<&
         });
     }
     None
+}
+
+pub fn display_time(dur: Duration) -> String {
+    let sec = dur.as_secs() % 60;
+    let min = (dur.as_secs() / 60) % 60;
+    let hrs = (dur.as_secs() / 60) / 60;
+    format!("{:02}:{:02}:{:02}", hrs, min, sec)
 }

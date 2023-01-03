@@ -4,8 +4,8 @@ use tokio::{net::{UnixStream, unix::{OwnedWriteHalf, OwnedReadHalf}}, io::{BufRe
 #[derive(Debug)]
 pub enum MpvEvent {
     StartFile,
-    EndFile,
-    Unknown
+    EndFile(String),
+    Unknown(String)
 }
 
 pub struct MpvClient {
@@ -53,13 +53,14 @@ impl MpvClient {
         let parsed = serde_json::from_str::<Value>(&buf)?;
         Ok(match parsed["event"].as_str() {
             Some("start-file") => MpvEvent::StartFile,
-            Some("end-file") => MpvEvent::EndFile,
-            _ => MpvEvent::Unknown
+            Some("end-file") => MpvEvent::EndFile(parsed["reason"].to_string()),
+            _ => MpvEvent::Unknown(parsed.to_string())
         })
     }
 
     pub async fn load_song(&mut self, url: &str) {
-        self.send(vec!["loadfile", url, "append"]).await;
+        // use replace mode because we only need 1 song in MPV at a time
+        self.send(vec!["loadfile", url, "replace"]).await;
     }
 
     pub async fn play(&mut self) {
@@ -72,5 +73,9 @@ impl MpvClient {
 
     pub async fn unpause(&mut self) {
         self.send(vec!["set", "pause", "no"]).await;
+    }
+
+    pub async fn get_property(&mut self, property: &str) {
+        self.send(vec!["get_property", property]).await;
     }
 }

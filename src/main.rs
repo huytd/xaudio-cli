@@ -2,15 +2,18 @@ mod youtube;
 mod ui;
 mod mpv;
 
-use std::{io::Result, fmt::Display, collections::HashSet, process::Stdio, thread, time::Duration};
+use std::{io::Result, fmt::Display, collections::HashSet, thread, time::{Duration, Instant}};
 use box_drawing::light::HORIZONTAL;
 use dotenv::dotenv;
 use mpv::MpvClient;
 use pancurses::{Window, Input, COLOR_BLUE, init_pair, COLOR_WHITE};
 use tokio::{sync::mpsc::{Receiver, Sender}, select};
 use ui::{App, run};
-use xaudio_cli::{ESCAPE_KEY, truncate, TITLE_PADDING, TAB_KEY, BACKSPACE_KEY, ENTER_KEY, get_total_pages, paginate};
+use xaudio_cli::{ESCAPE_KEY, truncate, TITLE_PADDING, TAB_KEY, BACKSPACE_KEY, ENTER_KEY, get_total_pages, paginate, display_time};
 use youtube::SearchEntry;
+
+// TODO:
+// 1. BUG - Add duplicate item into playlist
 
 #[derive(Debug)]
 enum Command {
@@ -34,6 +37,9 @@ enum Message {
     InputText(char),
     DeleteText,
     DisplaySearchResult(Vec<SearchEntry>),
+    SongStarted(Instant),
+    SongStopped(String),
+    SongDuration(Duration),
     None
 }
 
@@ -63,6 +69,10 @@ struct MusicApp {
     keyword: String,
     loading: bool,
     subscriber: Sender<Command>,
+    song_duration: Duration,
+    playing: bool,
+    playing_index: usize,
+    last_started: Instant
 }
 
 impl MusicApp {
@@ -77,6 +87,10 @@ impl MusicApp {
             keyword: String::new(),
             loading: false,
             subscriber: tx,
+            playing: false,
+            playing_index: 0,
+            last_started: Instant::now(),
+            song_duration: Duration::default()
         }
     }
 
@@ -104,7 +118,14 @@ impl MusicApp {
     fn draw_base_ui(&self, win: &Window) {
         let (screen_height, screen_width) = win.get_max_yx();
         let horizontal_line = std::iter::repeat(HORIZONTAL).take(screen_width as usize).collect::<String>();
-        win.mvprintw(0, 0, format!("{}", self.mode));
+        if self.playing {
+            let played_duration = display_time(Instant::now().duration_since(self.last_started));
+            let total_duration = display_time(self.song_duration);
+            let current_song = &self.playing_list[self.playing_index];
+            win.mvprintw(0, 0, format!("▶ {} - {} / {}", truncate(&current_song.title, 60), played_duration, total_duration));
+        } else {
+            win.mvprintw(0, 0, format!("{}", self.mode));
+        }
         win.mvprintw(1, 0, &horizontal_line);
         win.mvprintw(screen_height - 2, 0, &horizontal_line);
     }
@@ -243,10 +264,26 @@ impl App for MusicApp {
             Message::DeleteText => {
                 self.input_pop_last(win);
             },
-            Message::None => {},
             Message::PlaySelected => {
-                _ = self.subscriber.try_send(Command::Play(self.keyword.clone()));
+                let selected_index = self.selected_index + self.current_page * self.page_display_size;
+                let song = &self.search_results[selected_index];
+                _ = self.subscriber.try_send(Command::Play(song.id.to_owned()));
+                self.playing_index = self.selected_index;
             },
+            Message::SongStarted(current_time) => {
+                self.playing = true;
+                self.last_started = current_time;
+            },
+            Message::SongStopped(reason) => {
+                self.playing = false;
+                if reason.eq("eof") {
+                    // should play next
+                }
+            },
+            Message::SongDuration(duration) => {
+                self.song_duration = duration;
+            },
+            Message::None => {},
         }
         return true;
     }
@@ -308,7 +345,12 @@ impl App for MusicApp {
         }
 
         if let AppMode::Playing = self.mode {
-            self.draw_list(&self.playing_list, &[], win);
+            let highlight_playing = if self.playing {
+                vec![self.playing_list[self.playing_index].clone()]
+            } else {
+                vec![]
+            };
+            self.draw_list(&self.playing_list, &highlight_playing, win);
         } else {
             self.draw_list(&self.search_results, &self.playing_list, win);
         }
@@ -327,8 +369,10 @@ async fn runtime(mut rx: Receiver<Command>, tx: Sender<Message>) {
                                 _ = tx.send(Message::DisplaySearchResult(results)).await;
                             }
                         }
-                        Command::Play(_) => {
-                            mpv.load_song("https://www.youtube.com/watch?v=CD-E-LDc384").await;
+                        Command::Play(song_id) => {
+                            let song_duration = youtube::get_song_duration(&song_id).await.unwrap_or_default();
+                            _ = tx.send(Message::SongDuration(song_duration)).await;
+                            mpv.load_song(format!("https://www.youtube.com/watch?v={}", song_id).as_str()).await;
                             mpv.play().await;
                         }
                     }
@@ -336,7 +380,15 @@ async fn runtime(mut rx: Receiver<Command>, tx: Sender<Message>) {
             },
             mpv_event = mpv.recv() => {
                 if let Ok(event) = mpv_event {
-                    println!("EVENT: {:?}", event);
+                    match event {
+                        mpv::MpvEvent::StartFile => {
+                            _ = tx.send(Message::SongStarted(Instant::now())).await;
+                        },
+                        mpv::MpvEvent::EndFile(reason) => {
+                            _ = tx.send(Message::SongStopped(reason)).await;
+                        },
+                        mpv::MpvEvent::Unknown(_event) => {}
+                    }
                 }
             }
         }
@@ -349,6 +401,13 @@ async fn main() -> Result<()> {
     tokio::spawn(async move {
         MpvClient::start_server().await;
     });
+    // Want to know why a 500ms delay? It's a long story.
+    // Once upon a time, there was a process called "mpv" spawned
+    // after the dotenv().ok() statement. It carries the responsibility
+    // of being an RPC server that our runtime will be connected to.
+    // This process takes a few milliseconds to start, if we just start
+    // the MusicApp right away, the connection would be failed.
+    // Hence, we wait 500ms.
     thread::sleep(Duration::from_millis(500));
     let (cmd_tx, cmd_rx) = tokio::sync::mpsc::channel::<Command>(1);
     let (msg_tx, msg_rx) = tokio::sync::mpsc::channel::<Message>(1);

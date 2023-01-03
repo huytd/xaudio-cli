@@ -14,3 +14,4 @@ tokio = { version = "1.23.0", features = ["full"] }
 dotenv = "0.15.0"
 pancurses = { version = "0.17.0", features = ["wide"] }
 box_drawing = "0.1.2"
+regex = "1"

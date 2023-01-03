@@ -1,5 +1,6 @@
-use std::process::Command;
-use std::env;
+use std::{env, time::Duration};
+use regex::Regex;
+use serde_json::Value;
 
 fn get_api_key() -> Result<String, String> {
     return env::var("YOUTUBE_API_KEY").map_err(stringify_error);
@@ -88,56 +89,11 @@ pub async fn search_song(input: &str) -> Result<Vec<SearchEntry>, String> {
     Ok(vec![])
 }
 
-pub async fn get_song_stream(url: &str) -> Result<reqwest::Response, String> {
-    reqwest::get(url).await.map_err(stringify_error)
-}
-
-pub fn get_song_url(id: &str) -> Result<String, String> {
-    let url = format!("https://youtube.com/watch?v={}", id);
-    println!("DBG::FETCHING {}", url);
-    let output = Command::new("youtube-dl")
-    .arg("--force-ipv4")
-    .arg("--get-url")
-    .arg("-f bestaudio")
-    .arg(url)
-    .output().map_err(stringify_error)?;
-    let stdout = String::from_utf8(output.stdout).map_err(stringify_error)?;
-    let stderr = String::from_utf8(output.stderr).map_err(stringify_error)?;
-    println!("DBG::STDOUT {}", stdout);
-    println!("DBG::STDERR {}", stderr);
-    Ok(stdout.replace("\n", ""))
-}
-
-pub fn get_songs_in_playlist(playlist_url: &str) -> Result<Playlist, String> {
-    let output = Command::new("youtube-dl")
-    .arg("-J")
-    .arg("--flat-playlist")
-    .arg(playlist_url)
-    .output()
-    .map_err(stringify_error)?;
-    let stdout = String::from_utf8(output.stdout).map_err(stringify_error)?;
-    // Parse it as playlist
-    if let Ok(parsed ) = serde_json::from_str::<Playlist>(&stdout).map_err(stringify_error) {
-        return Ok(parsed);
-    }
-    // Parse it as a single item
-    if let Ok(parsed) = serde_json::from_str::<PlaylistEntry>(&stdout).map_err(stringify_error) {
-        return Ok(Playlist {
-            entries: vec![parsed]
-        });
-    }
-    println!("Could not parse the response data");
-    return Err("Error parsing data".to_owned());
-}
-
-
 pub async fn similar_songs(id: &str) -> Result<Vec<SearchEntry>, String> {
     let key = get_api_key()?;
     let url = format!("https://youtube.googleapis.com/youtube/v3/search?part=snippet&order=relevance&type=video&key={}&maxResults=30&relatedToVideoId={}", key, id);
-    println!("API CALL {}", url);
     let response = reqwest::get(&url).await.map_err(stringify_error)?;
     if let Ok(result) = response.json::<YoutubeSearchResult>().await {
-        println!("GOT {} items", result.items.len());
         let entries = result.items.into_iter().filter(|item| item.snippet.is_some()).map(|item| {
             let snippet = item.snippet.unwrap();
             SearchEntry {
@@ -150,3 +106,28 @@ pub async fn similar_songs(id: &str) -> Result<Vec<SearchEntry>, String> {
     }
     Ok(vec![])
 }
+
+pub async fn get_song_duration(id: &str) -> Result<Duration, String> {
+    let key = get_api_key()?;
+    let url = format!("https://youtube.googleapis.com/youtube/v3/videos?id={}&part=contentDetails&key={}&maxResults=30", id, key);
+    let response = reqwest::get(&url).await.map_err(stringify_error)?;
+    if let Ok(result) = response.json::<Value>().await {
+        let duration = result["items"].as_array().unwrap()
+            .get(0).unwrap().as_object().unwrap()
+            .get("contentDetails").unwrap()
+            .get("duration").unwrap()
+            .as_str().unwrap();
+        let re = Regex::new(r"^PT(?:(\d+)H)?(?:(\d+)M)?(?:(\d+))S?$").unwrap();
+        if let Some(captures) = re.captures(duration) {
+            if captures.len() >= 3 {
+                let hrs = captures.get(1).map_or(0, |m| m.as_str().parse::<u64>().unwrap());
+                let min = captures.get(2).map_or(0, |m| m.as_str().parse::<u64>().unwrap());
+                let sec = captures.get(3).map_or(0, |m| m.as_str().parse::<u64>().unwrap());
+                return Ok(Duration::from_secs(sec + min * 60 + hrs * 60 * 60));
+            }
+        }
+        return Ok(Duration::default());
+    }
+    Err("Cannot get song".to_owned())
+}
+
