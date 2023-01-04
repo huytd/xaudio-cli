@@ -53,7 +53,7 @@ impl MpvClient {
         let parsed = serde_json::from_str::<Value>(&buf)?;
         Ok(match parsed["event"].as_str() {
             Some("start-file") => MpvEvent::StartFile,
-            Some("end-file") => MpvEvent::EndFile(parsed["reason"].to_string()),
+            Some("end-file") => MpvEvent::EndFile(parsed["reason"].as_str().unwrap_or("").to_owned()),
             _ => MpvEvent::Unknown(parsed.to_string())
         })
     }

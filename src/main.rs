@@ -23,23 +23,31 @@ enum Command {
 
 #[derive(Debug)]
 enum Message {
+    // Main UI
     GoToSearch,
     GoToSearchBrowse,
     GoToPlaylist,
+    // Searching and Listing
     SearchSong,
-    PlaySelected,
     AddSelectedToPlaylist,
     RemoveSong,
     NextItem,
     PrevItem,
     NextPage,
     PrevPage,
+    // Playback
+    PlaySelected,
+    NextSong,
+    PrevSong,
+    // Input box
     InputText(char),
     DeleteText,
+    // Runtime messages
     DisplaySearchResult(Vec<SearchEntry>),
     SongStarted(Instant),
     SongStopped(String),
     SongDuration(Duration),
+    // Other
     None
 }
 
@@ -115,9 +123,36 @@ impl MusicApp {
         self.keyword.clear();
     }
 
+    fn play_selected_song(&mut self) {
+        let selected_index = self.selected_index + self.current_page * self.page_display_size;
+        let song = &self.search_results[selected_index];
+        _ = self.subscriber.try_send(Command::Play(song.id.to_owned()));
+        self.playing_index = self.selected_index;
+    }
+
+    fn play_next_song(&mut self) {
+        if self.selected_index < self.playing_list.len() - 1 {
+            self.selected_index += 1;
+        } else {
+            self.selected_index = 0;
+        }
+        self.play_selected_song();
+    }
+
+    fn play_prev_song(&mut self) {
+        if self.selected_index > 0 {
+            self.selected_index -= 1;
+        } else {
+            self.selected_index = self.playing_list.len() - 1;
+        }
+        self.play_selected_song();
+    }
+
     fn draw_base_ui(&self, win: &Window) {
         let (screen_height, screen_width) = win.get_max_yx();
         let horizontal_line = std::iter::repeat(HORIZONTAL).take(screen_width as usize).collect::<String>();
+        win.mv(0, 0);
+        win.clrtoeol();
         if self.playing {
             let played_duration = display_time(Instant::now().duration_since(self.last_started));
             let total_duration = display_time(self.song_duration);
@@ -134,7 +169,7 @@ impl MusicApp {
         let (screen_height, _) = win.get_max_yx();
         win.mv(screen_height - 1, 1);
         win.clrtoeol();
-        win.printw("[/] Search songs    [x] Remove    [Enter] Play    [Tab] Back to search");
+        win.printw("[/] Search  [x] Remove  [Enter] Play  [n/p] Next/Prev Song  [Tab] Back to search");
     }
 
     fn draw_loading(&self, win: &Window) {
@@ -265,10 +300,7 @@ impl App for MusicApp {
                 self.input_pop_last(win);
             },
             Message::PlaySelected => {
-                let selected_index = self.selected_index + self.current_page * self.page_display_size;
-                let song = &self.search_results[selected_index];
-                _ = self.subscriber.try_send(Command::Play(song.id.to_owned()));
-                self.playing_index = self.selected_index;
+                self.play_selected_song();
             },
             Message::SongStarted(current_time) => {
                 self.playing = true;
@@ -277,11 +309,17 @@ impl App for MusicApp {
             Message::SongStopped(reason) => {
                 self.playing = false;
                 if reason.eq("eof") {
-                    // should play next
+                    self.play_next_song();
                 }
             },
             Message::SongDuration(duration) => {
                 self.song_duration = duration;
+            },
+            Message::NextSong => {
+                self.play_next_song();
+            },
+            Message::PrevSong => {
+                self.play_prev_song();
             },
             Message::None => {},
         }
@@ -300,6 +338,8 @@ impl App for MusicApp {
                     Input::Character('x') => Message::RemoveSong,
                     Input::Character('>') => Message::NextPage,
                     Input::Character('<') => Message::PrevPage,
+                    Input::Character('n') => Message::NextSong,
+                    Input::Character('p') => Message::PrevSong,
                     _ => Message::None
                 }
             },

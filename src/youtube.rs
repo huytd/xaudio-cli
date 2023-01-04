@@ -117,6 +117,7 @@ pub async fn get_song_duration(id: &str) -> Result<Duration, String> {
             .get("contentDetails").unwrap()
             .get("duration").unwrap()
             .as_str().unwrap();
+        // Shamelessly stolen from https://gist.github.com/vkdinventor/93a112366a68f7eb6135e57f287687e5
         let re = Regex::new(r"^PT(?:(\d+)H)?(?:(\d+)M)?(?:(\d+))S?$").unwrap();
         if let Some(captures) = re.captures(duration) {
             if captures.len() >= 3 {

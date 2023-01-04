@@ -11,7 +11,7 @@ pub fn truncate(text: &str, len: usize) -> String {
     if len > char_count {
         return text.to_owned();
     } else {
-        return text.chars().take(len).collect::<String>() + "...";
+        return text.chars().take(len).collect::<String>() + "…";
     }
 }
 
