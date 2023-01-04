@@ -3,8 +3,19 @@
 Xaudio CLI is a remake version of [xaudio](https://github.com/huytd/xaudio), focusing on
 CLI interface.
 
-<img width="700" alt="image" src="https://user-images.githubusercontent.com/613943/210054195-26f4da7f-c70b-4e59-b88d-9e7b2927db53.png">
-<img width="700" alt="image" src="https://user-images.githubusercontent.com/613943/210480900-44b3937a-b0a1-49f7-83ce-1d1ca17042b2.png">
+![](https://user-images.githubusercontent.com/613943/210482625-d01b016e-33c4-43b0-84ac-536137e33bdc.png)
+
+## System requirements
+
+Xaudio CLI uses [MPV](https://mpv.io) as a backend, so, make sure you have MPV installed:
+
+```
+brew instal mpv
+```
+
+To compile from source, you'll also need the Rust compiler, which is obvious.
+
+## How to run
 
 To run, you'll need to create a `.env` file and put in your Youtube API key:
 
@@ -17,3 +28,17 @@ Then run the application with:
 ```
 make
 ```
+
+## How to use
+
+The app will start in _Playlist_ mode, in this mode, you can:
+- Hit `/` to search for songs
+- Use `j` and `k` to navigate up and down
+- Use `<` and `>` to switch between pages
+- Hit `Enter` to play a song
+- Use `n` and `p` to play next/previous song
+- Hit `Tab` to go back to the previous search result
+
+In the _Search_ mode, you can type the song name to search and navigate with the 
+same keybinding as the _Playlist_ mode. You can also hit `ESC` to go back to the
+_Playlist_ mode.
