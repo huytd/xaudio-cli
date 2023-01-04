@@ -1,0 +1,76 @@
+# Technical Details
+
+This note outlined some details about the implementation of the Xaudio CLI app.
+
+## The UI
+
+To render on the terminal, we're using the [pancurses](https://crates.io/crates/pancurses) 
+crate, it is a library that provide a cross platform API that wrapped around the _ncurses_ library.
+
+### Elm-like Architecture
+
+The [src/ui.rs](src/ui.rs) module provide an `App` trait, which implements an Elm-like architecture, 
+to help handling the lifecycle of a terminal UI application. 
+
+```
+pub trait App {
+    type Msg;
+    fn init(&mut self, win: &Window);
+    fn update(&mut self, win: &Window, msg: Self::Msg) -> bool;
+    fn input(&mut self, input: Input) -> Self::Msg;
+    fn render(&self, win: &Window);
+}
+```
+
+<img width="743" alt="image" src="https://user-images.githubusercontent.com/613943/210499293-04f35339-a474-4798-b1ac-4151ef0c5a9b.png">
+
+An application that implemented `App` trait will work in the following steps:
+
+- Initialized the application with the `App::init()` method
+- UI rendering logic will be implemented inside the `App::render()` method. There should be no data 
+manipulation happen in the rendering step, hence, the receiver of this method is an immutable `&self`.
+- Input events like keyboard will be handled in the `App::input()` method. This method returns a `Msg` 
+value. A `Msg` can be used as a state manipulation signal.
+- All the `Msg` signals will be handled by the `App::update()` method, which will transform the app's 
+state. New app states will be rendered out in the `App::render()` method.
+
+### The MusicApp struct
+
+The Xaudio CLI application is defined by the `MusicApp` struct, which implements the `App` trait.
+
+The `Message` enum defined all the UI signals that the `MusicApp` will be interacted with, for example:
+
+- The `GoToSearch`, `GoToSearchBrowse`, `GoToPlaylist` messages will toggle the different `AppMode`. 
+Each mode is each screen in the app. We have 3 main screens: _Playlist_, _Search input_ and _Search browse_.
+- The `InputText(char)`, `DeleteText` messages are used for handling text input in the _Search input_ screen.
+- The `PlaySelected`, `NextSong`, `PrevSong` messages are the playback signal that will be sent to the runtime 
+method to interact with MPV.
+- The `DisplaySearchResult(Vec<SearchEntry>)`, `SongStarted(Instant)`, `SongStopped(String)` are the messages 
+that will be sent back to the `MusicApp` from the runtime method. 
+
+The UI rendering logic are being implemented in the `MusicApp::render()` method, but different part of the UI 
+are splitted into each smaller render method like `draw_loading()`, `draw_search_box()`, `draw_list()`,...
+
+### Communicating with external tasks
+
+As you can see, everything implemented in the `MusicApp` are for the UI only. Tasks like making API call to 
+Youtube or communicating with MPV to play audio are considered external tasks. To handle these tasks, we have
+the `runtime()` method running in a separated thread.
+
+The `MusicApp` communicates with the `runtime()` thread via two channels `(Receiver<Command>, Sender<Message>)`.
+
+<img width="926" alt="image" src="https://user-images.githubusercontent.com/613943/210498959-9929ada4-a173-4539-8c90-872e1c3b6198.png">
+
+When ever we need to trigger some external tasks, the `MusicApp` will dispatch a `Command` via a `subscriber`:
+
+```rust
+_ = self.subscriber.try_send(Command::Play(song.id.to_owned()));
+```
+
+And when the `runtime` need to send some information back to the `MusicApp`, we send the `Message` back:
+
+```rust
+_ = tx.send(Message::SongStarted(Instant::now())).await;
+```
+
+This message will then be handled by the `MusicApp::update()` method.
