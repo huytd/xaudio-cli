@@ -42,3 +42,11 @@ The app will start in _Playlist_ mode, in this mode, you can:
 In the _Search_ mode, you can type the song name to search and navigate with the 
 same keybinding as the _Playlist_ mode. You can also hit `ESC` to go back to the
 _Playlist_ mode.
+
+## Technical Details
+
+Please refer to [DEVELOPMENT.md](DEVELOPMENT.md) for more about the technical details:
+
+- The Elm-like Architecture ([src/ui.rs](src/ui.rs), [MusicApp](https://github.com/huytd/xaudio-cli/blob/main/src/main.rs#L232) struct)
+- mpv JSON IPC client ([src/mpv.rs](src/mpv.rs))
+- Youtube API v3 ([src/youtube.rs](src/youtube.rs))
