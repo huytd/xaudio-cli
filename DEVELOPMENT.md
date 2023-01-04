@@ -12,7 +12,7 @@ crate, it is a library that provide a cross platform API that wrapped around the
 The [src/ui.rs](src/ui.rs) module provide an `App` trait, which implements an Elm-like architecture, 
 to help handling the lifecycle of a terminal UI application. 
 
-```
+```rust
 pub trait App {
     type Msg;
     fn init(&mut self, win: &Window);
@@ -74,3 +74,44 @@ _ = tx.send(Message::SongStarted(Instant::now())).await;
 ```
 
 This message will then be handled by the `MusicApp::update()` method.
+
+## MPV client
+
+The main functionality of `MusicApp` is to interact with the Youtube API to search sonsg and keeping a playlist.
+To actually play music from a Youtube URL, we're using MPV.
+
+To communicate with the MPV process, we first spawn the `mpv` application as a [JSON IPC](https://mpv.io/manual/stable/#json-ipc) server with the 
+`MpvClient::start_server()` method. Then open a new `UnixStream` connection to MPV's socket server:
+
+```rust
+let stream = UnixStream::connect("/tmp/mpv-socket").await.expect("Cannot connect to MPV");
+```
+
+Although MPV supports playlist, to make it simpler, we only load one song at a time to play. The playback process
+for a song would be described as:
+
+1. Get the selected song information and its Youtube ID
+2. Construct a Youtube URL from that ID
+3. Send a `loadfile` command to MPV to load that URL
+4. Play the loaded song in MPV
+
+See `MusicApp::play_selected_song()` method for the implementation.
+
+<img width="1083" alt="image" src="https://user-images.githubusercontent.com/613943/210510024-ce73932a-dd12-4a52-b33d-5bc2a9eb5e44.png">
+
+From the `MusicApp`, a `Command::Play(song-id)` command will be sent to the `runtime` thread to communicate with MPV. When MPV 
+start to play the music, a message called `Message::SongStarted(current-time)` will be sent back to `MusicApp`.
+
+When a song is finished, an message called `Message::SongStopped(reason)` will be sent to `MusicApp`, with `reason` being the 
+`"eof"` string. By receiving this, we will know that it's time to play the next song in the playlist, the `MusicApp::play_next_song()` method
+will be called to handle this.
+
+<img width="1062" alt="image" src="https://user-images.githubusercontent.com/613943/210510630-ed9be5a1-9f75-486f-8c56-7e53d98764b7.png">
+
+Currently, only a small set of MPV commands/events are being implemented. The list may or may not be extended in the future, depends on what 
+is needed. For a full list of commands/events, please check the following links:
+
+- https://mpv.io/manual/stable/#list-of-input-commands
+- https://mpv.io/manual/stable/#list-of-events
+
+The implementation's of [src/mpv.rs](src/mpv.rs) module are heavily inspired by the @joleeee's [mpvi](https://github.com/joleeee/mpvi) project.
