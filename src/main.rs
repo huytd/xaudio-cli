@@ -14,6 +14,8 @@ use youtube::SearchEntry;
 
 // TODO:
 // 1. BUG - Add duplicate item into playlist
+// 2. FEA - Save and load playlist from file
+// 3. FEA - Support multiple playlists
 
 #[derive(Debug)]
 enum Command {
