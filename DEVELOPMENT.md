@@ -61,7 +61,7 @@ The `MusicApp` communicates with the `runtime()` thread via two channels `(Recei
 
 <img width="926" alt="image" src="https://user-images.githubusercontent.com/613943/210498959-9929ada4-a173-4539-8c90-872e1c3b6198.png">
 
-When ever we need to trigger some external tasks, the `MusicApp` will dispatch a `Command` via a `subscriber`:
+When ever we need to trigger some external tasks, the `MusicApp` will dispatch a `Command` via the channel:
 
 ```rust
 _ = self.subscriber.try_send(Command::Play(song.id.to_owned()));
