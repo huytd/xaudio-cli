@@ -20,7 +20,9 @@ use youtube::SearchEntry;
 #[derive(Debug)]
 enum Command {
     Search(String),
-    Play(String)
+    Play(String),
+    LoadPlaylist,
+    SavePlaylist
 }
 
 #[derive(Debug)]

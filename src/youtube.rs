@@ -50,24 +50,9 @@ pub struct Snippet {
     pub channel_title: String,
 }
 
-#[derive(Default, Debug, Clone, PartialEq, serde_derive::Serialize, serde_derive::Deserialize)]
-#[serde(rename_all = "camelCase")]
-pub struct Playlist {
-    pub entries: Vec<PlaylistEntry>,
-}
-
-#[derive(Default, Debug, Clone, PartialEq, serde_derive::Serialize, serde_derive::Deserialize)]
-#[serde(rename_all = "camelCase")]
-pub struct PlaylistEntry {
-    pub id: String,
-    pub title: String,
-    pub uploader: Option<String>
-}
-
 #[derive(Default, Debug, Clone, serde_derive::Serialize, serde_derive::Deserialize)]
 pub struct SearchEntry {
     pub title: String,
-    pub uploader: String,
     pub id: String
 }
 
@@ -80,7 +65,6 @@ pub async fn search_song(input: &str) -> Result<Vec<SearchEntry>, String> {
             let snippet = item.snippet.unwrap();
             SearchEntry {
                 title: snippet.title.to_owned(),
-                uploader: snippet.channel_title.to_owned(),
                 id: item.id.video_id.to_owned()
             }
         }).collect();
@@ -98,7 +82,6 @@ pub async fn similar_songs(id: &str) -> Result<Vec<SearchEntry>, String> {
             let snippet = item.snippet.unwrap();
             SearchEntry {
                 title: snippet.title.to_owned(),
-                uploader: snippet.channel_title.to_owned(),
                 id: item.id.video_id.to_owned()
             }
         }).collect();
