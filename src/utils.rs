@@ -1,14 +1,14 @@
 use std::{time::Duration, fs::File, io::{BufReader, BufRead, Write}};
 
-use youtube::SearchEntry;
-
-mod youtube;
+use crate::youtube::SearchEntry;
 
 pub const BACKSPACE_KEY: char = '\u{7f}';
 pub const ESCAPE_KEY: char = '\u{1b}';
 pub const ENTER_KEY: char = '\n';
 pub const TAB_KEY: char = '\t';
 pub const TITLE_PADDING: usize = 12;
+pub const HOME_DIR: &str = env!("HOME");
+pub const PLAYLIST_FILE_PATH: &str = "/.xaudio-playlist";
 
 pub fn truncate(text: &str, len: usize) -> String {
     let char_count = text.chars().count();
@@ -43,24 +43,32 @@ pub fn display_time(dur: Duration) -> String {
     format!("{:02}:{:02}:{:02}", hrs, min, sec)
 }
 
-pub fn playlist_from_file(file_name: &str) -> std::io::Result<Vec<SearchEntry>> {
+pub fn read_playlist() -> std::io::Result<Vec<SearchEntry>> {
+    let file_name = format!("{}{}", HOME_DIR, PLAYLIST_FILE_PATH);
     let file = File::open(file_name)?;
     let mut reader = BufReader::new(file);
     let mut line = String::new();
     let mut result = vec![];
-    while let Ok(_) = reader.read_line(&mut line) {
+    while let Ok(bytes) = reader.read_line(&mut line) {
+        if bytes == 0 {
+            break;
+        }
         if let Some((id, title)) = line.split_once(" - ") {
             result.push(SearchEntry {
                 id: id.to_owned(),
-                title: title.to_owned()
+                title: title.trim().to_owned()
             });
         }
+        line.clear();
     }
     Ok(result)
 }
 
-pub fn playlist_to_file(file_name: &str, playlist: &[SearchEntry]) -> std::io::Result<()> {
+pub fn save_playlist(playlist: &[SearchEntry]) -> std::io::Result<()> {
+    let file_name = format!("{}{}", HOME_DIR, PLAYLIST_FILE_PATH);
     let mut file = File::create(file_name)?;
-    let output = playlist.iter().map(|song| format!("{} - {}", song.id, song.title)).collect::<Vec<String>>().join("\n");
-    write!(file, "{}", output)
+    playlist.iter().map(|song| format!("{} - {}", song.id, song.title)).for_each(|line| {
+        _ = writeln!(file, "{}", line);
+    });
+    Ok(())
 }

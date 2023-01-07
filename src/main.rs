@@ -1,3 +1,4 @@
+mod utils;
 mod youtube;
 mod ui;
 mod mpv;
@@ -9,20 +10,20 @@ use mpv::MpvClient;
 use pancurses::{Window, Input, COLOR_BLUE, init_pair, COLOR_WHITE};
 use tokio::{sync::mpsc::{Receiver, Sender}, select};
 use ui::{App, run};
-use xaudio_cli::{ESCAPE_KEY, truncate, TITLE_PADDING, TAB_KEY, BACKSPACE_KEY, ENTER_KEY, get_total_pages, paginate, display_time};
+use utils::{ESCAPE_KEY, truncate, TITLE_PADDING, TAB_KEY, BACKSPACE_KEY, ENTER_KEY, get_total_pages, paginate, display_time};
 use youtube::SearchEntry;
+
+use crate::utils::{save_playlist, read_playlist};
 
 // TODO:
 // 1. BUG - Add duplicate item into playlist
-// 2. FEA - Save and load playlist from file
-// 3. FEA - Support multiple playlists
+// 2. FEA - Support multiple playlists
 
 #[derive(Debug)]
 enum Command {
     Search(String),
     Play(String),
-    LoadPlaylist,
-    SavePlaylist
+    SavePlaylist(Vec<SearchEntry>)
 }
 
 #[derive(Debug)]
@@ -88,10 +89,10 @@ struct MusicApp {
 }
 
 impl MusicApp {
-    pub fn new(tx: Sender<Command>) -> Self {
+    pub fn new(playlist: Vec<SearchEntry>, tx: Sender<Command>) -> Self {
         Self {
             mode: AppMode::Playing,
-            playing_list: vec![],
+            playing_list: playlist,
             search_results: vec![],
             current_page: 0,
             page_display_size: 0,
@@ -248,7 +249,7 @@ impl App for MusicApp {
                 self.search_results = result;
                 self.switch_mode(AppMode::SearchBrowse, win);
                 self.loading = false;
-            }
+            },
             Message::GoToSearch => {
                 self.switch_mode(AppMode::SearchInput, win);
                 self.input_clear(win);
@@ -269,9 +270,11 @@ impl App for MusicApp {
                 let selected_index = self.selected_index + self.current_page * self.page_display_size;
                 let song = &self.search_results[selected_index];
                 self.playing_list.push(song.to_owned());
+                _ = self.subscriber.try_send(Command::SavePlaylist(self.playing_list.to_owned()));
             },
             Message::RemoveSong => {
                 self.playing_list.remove(self.selected_index);
+                _ = self.subscriber.try_send(Command::SavePlaylist(self.playing_list.to_owned()));
             },
             Message::NextPage => {
                 let list_len = if self.mode == AppMode::Playing { self.playing_list.len() } else { self.search_results.len() };
@@ -419,6 +422,9 @@ async fn runtime(mut rx: Receiver<Command>, tx: Sender<Message>) {
                             mpv.load_song(format!("https://www.youtube.com/watch?v={}", song_id).as_str()).await;
                             mpv.play().await;
                         }
+                        Command::SavePlaylist(current_playlist) => {
+                            _ = save_playlist(&current_playlist);
+                        }
                     }
                 }
             },
@@ -455,7 +461,9 @@ async fn main() -> Result<()> {
     thread::sleep(Duration::from_millis(500));
     let (cmd_tx, cmd_rx) = tokio::sync::mpsc::channel::<Command>(1);
     let (msg_tx, msg_rx) = tokio::sync::mpsc::channel::<Message>(1);
-    let app = MusicApp::new(cmd_tx);
+
+    let playlist = read_playlist()?;
+    let app = MusicApp::new(playlist, cmd_tx);
     tokio::spawn(runtime(cmd_rx, msg_tx));
     run(app, false, msg_rx);
     Ok(())
