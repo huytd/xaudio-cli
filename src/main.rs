@@ -130,7 +130,7 @@ impl MusicApp {
 
     fn play_selected_song(&mut self) {
         let selected_index = self.selected_index + self.current_page * self.page_display_size;
-        let song = &self.search_results[selected_index];
+        let song = &self.playing_list[selected_index];
         _ = self.subscriber.try_send(Command::Play(song.id.to_owned()));
         self.playing_index = self.selected_index;
     }
