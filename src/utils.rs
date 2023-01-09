@@ -1,6 +1,6 @@
 use std::{time::Duration, fs::File, io::{BufReader, BufRead, Write}};
 
-use crate::youtube::SearchEntry;
+use crate::youtube::SongEntry;
 
 pub const BACKSPACE_KEY: char = '\u{7f}';
 pub const ESCAPE_KEY: char = '\u{1b}';
@@ -43,7 +43,7 @@ pub fn display_time(dur: Duration) -> String {
     format!("{:02}:{:02}:{:02}", hrs, min, sec)
 }
 
-pub fn read_playlist() -> std::io::Result<Vec<SearchEntry>> {
+pub fn read_playlist() -> std::io::Result<Vec<SongEntry>> {
     let file_name = format!("{}{}", HOME_DIR, PLAYLIST_FILE_PATH);
     let file = File::open(file_name)?;
     let mut reader = BufReader::new(file);
@@ -54,7 +54,7 @@ pub fn read_playlist() -> std::io::Result<Vec<SearchEntry>> {
             break;
         }
         if let Some((id, title)) = line.split_once(" - ") {
-            result.push(SearchEntry {
+            result.push(SongEntry {
                 id: id.to_owned(),
                 title: title.trim().to_owned()
             });
@@ -64,7 +64,7 @@ pub fn read_playlist() -> std::io::Result<Vec<SearchEntry>> {
     Ok(result)
 }
 
-pub fn save_playlist(playlist: &[SearchEntry]) -> std::io::Result<()> {
+pub fn save_playlist(playlist: &[SongEntry]) -> std::io::Result<()> {
     let file_name = format!("{}{}", HOME_DIR, PLAYLIST_FILE_PATH);
     let mut file = File::create(file_name)?;
     playlist.iter().map(|song| format!("{} - {}", song.id, song.title)).for_each(|line| {

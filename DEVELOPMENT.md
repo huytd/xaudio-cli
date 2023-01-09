@@ -45,7 +45,7 @@ Each mode is each screen in the app. We have 3 main screens: _Playlist_, _Search
 - The `InputText(char)`, `DeleteText` messages are used for handling text input in the _Search input_ screen.
 - The `PlaySelected`, `NextSong`, `PrevSong` messages are the playback signal that will be sent to the runtime 
 method to interact with MPV.
-- The `DisplaySearchResult(Vec<SearchEntry>)`, `SongStarted(Instant)`, `SongStopped(String)` are the messages 
+- The `DisplaySearchResult(Vec<SongEntry>)`, `SongStarted(Instant)`, `SongStopped(String)` are the messages 
 that will be sent back to the `MusicApp` from the runtime method. 
 
 The UI rendering logic are being implemented in the `MusicApp::render()` method, but different part of the UI 

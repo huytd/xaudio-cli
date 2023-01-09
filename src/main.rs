@@ -11,19 +11,20 @@ use pancurses::{Window, Input, COLOR_BLUE, init_pair, COLOR_WHITE};
 use tokio::{sync::mpsc::{Receiver, Sender}, select};
 use ui::{App, run};
 use utils::{ESCAPE_KEY, truncate, TITLE_PADDING, TAB_KEY, BACKSPACE_KEY, ENTER_KEY, get_total_pages, paginate, display_time};
-use youtube::SearchEntry;
+use youtube::SongEntry;
 
 use crate::utils::{save_playlist, read_playlist};
 
 // TODO:
 // 1. BUG - Add duplicate item into playlist
 // 2. FEA - Support multiple playlists
+// 3. FEA - Shuffle Songs
 
 #[derive(Debug)]
 enum Command {
     Search(String),
     Play(String),
-    SavePlaylist(Vec<SearchEntry>)
+    SavePlaylist(Vec<SongEntry>)
 }
 
 #[derive(Debug)]
@@ -48,7 +49,7 @@ enum Message {
     InputText(char),
     DeleteText,
     // Runtime messages
-    DisplaySearchResult(Vec<SearchEntry>),
+    DisplaySearchResult(Vec<SongEntry>),
     SongStarted(Instant),
     SongStopped(String),
     SongDuration(Duration),
@@ -74,8 +75,8 @@ impl Display for AppMode {
 
 struct MusicApp {
     mode: AppMode,
-    playing_list: Vec<SearchEntry>,
-    search_results: Vec<SearchEntry>,
+    current_playlist: Vec<SongEntry>,
+    search_results: Vec<SongEntry>,
     current_page: usize,
     page_display_size: usize,
     selected_index: usize,
@@ -89,10 +90,10 @@ struct MusicApp {
 }
 
 impl MusicApp {
-    pub fn new(playlist: Vec<SearchEntry>, tx: Sender<Command>) -> Self {
+    pub fn new(playlist: Vec<SongEntry>, tx: Sender<Command>) -> Self {
         Self {
             mode: AppMode::Playing,
-            playing_list: playlist,
+            current_playlist: playlist,
             search_results: vec![],
             current_page: 0,
             page_display_size: 0,
@@ -130,13 +131,13 @@ impl MusicApp {
 
     fn play_selected_song(&mut self) {
         let selected_index = self.selected_index + self.current_page * self.page_display_size;
-        let song = &self.playing_list[selected_index];
+        let song = &self.current_playlist[selected_index];
         _ = self.subscriber.try_send(Command::Play(song.id.to_owned()));
         self.playing_index = self.selected_index;
     }
 
     fn play_next_song(&mut self) {
-        if self.selected_index < self.playing_list.len() - 1 {
+        if self.selected_index < self.current_playlist.len() - 1 {
             self.selected_index += 1;
         } else {
             self.selected_index = 0;
@@ -148,7 +149,7 @@ impl MusicApp {
         if self.selected_index > 0 {
             self.selected_index -= 1;
         } else {
-            self.selected_index = self.playing_list.len() - 1;
+            self.selected_index = self.current_playlist.len() - 1;
         }
         self.play_selected_song();
     }
@@ -161,7 +162,7 @@ impl MusicApp {
         if self.playing {
             let played_duration = display_time(Instant::now().duration_since(self.last_started));
             let total_duration = display_time(self.song_duration);
-            let current_song = &self.playing_list[self.playing_index];
+            let current_song = &self.current_playlist[self.playing_index];
             win.mvprintw(0, 0, format!("▶ {} - {} / {}", truncate(&current_song.title, 60), played_duration, total_duration));
         } else {
             win.mvprintw(0, 0, format!("{}", self.mode));
@@ -198,7 +199,7 @@ impl MusicApp {
         win.printw("[j/k] Up/Down    [<] Previous page    [>] Next page    [/] Search");
     }
 
-    fn draw_list(&self, list: &[SearchEntry], exclude_list: &[SearchEntry], win: &Window) {
+    fn draw_list(&self, list: &[SongEntry], exclude_list: &[SongEntry], win: &Window) {
         let excluded_ids = exclude_list.iter().map(|entry| entry.id.to_owned()).collect::<HashSet<String>>();
         let (_, screen_width) = win.get_max_yx();
         let total_pages = get_total_pages(list.len(),self.page_display_size);
@@ -269,15 +270,15 @@ impl App for MusicApp {
             Message::AddSelectedToPlaylist => {
                 let selected_index = self.selected_index + self.current_page * self.page_display_size;
                 let song = &self.search_results[selected_index];
-                self.playing_list.push(song.to_owned());
-                _ = self.subscriber.try_send(Command::SavePlaylist(self.playing_list.to_owned()));
+                self.current_playlist.push(song.to_owned());
+                _ = self.subscriber.try_send(Command::SavePlaylist(self.current_playlist.to_owned()));
             },
             Message::RemoveSong => {
-                self.playing_list.remove(self.selected_index);
-                _ = self.subscriber.try_send(Command::SavePlaylist(self.playing_list.to_owned()));
+                self.current_playlist.remove(self.selected_index);
+                _ = self.subscriber.try_send(Command::SavePlaylist(self.current_playlist.to_owned()));
             },
             Message::NextPage => {
-                let list_len = if self.mode == AppMode::Playing { self.playing_list.len() } else { self.search_results.len() };
+                let list_len = if self.mode == AppMode::Playing { self.current_playlist.len() } else { self.search_results.len() };
                 let total_pages = get_total_pages(list_len, self.page_display_size);
                 if self.current_page < total_pages - 1 {
                     self.current_page += 1;
@@ -393,13 +394,13 @@ impl App for MusicApp {
 
         if let AppMode::Playing = self.mode {
             let highlight_playing = if self.playing {
-                vec![self.playing_list[self.playing_index].clone()]
+                vec![self.current_playlist[self.playing_index].clone()]
             } else {
                 vec![]
             };
-            self.draw_list(&self.playing_list, &highlight_playing, win);
+            self.draw_list(&self.current_playlist, &highlight_playing, win);
         } else {
-            self.draw_list(&self.search_results, &self.playing_list, win);
+            self.draw_list(&self.search_results, &self.current_playlist, win);
         }
     }
 }

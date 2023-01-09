@@ -51,19 +51,19 @@ pub struct Snippet {
 }
 
 #[derive(Default, Debug, Clone, serde_derive::Serialize, serde_derive::Deserialize)]
-pub struct SearchEntry {
+pub struct SongEntry {
     pub title: String,
     pub id: String
 }
 
-pub async fn search_song(input: &str) -> Result<Vec<SearchEntry>, String> {
+pub async fn search_song(input: &str) -> Result<Vec<SongEntry>, String> {
     let key = get_api_key()?;
     let url = format!("https://youtube.googleapis.com/youtube/v3/search?part=snippet&order=relevance&q={}&type=video&key={}&maxResults=50", input, key);
     let response = reqwest::get(&url).await.map_err(stringify_error)?;
     if let Ok(result) = response.json::<YoutubeSearchResult>().await {
         let entries = result.items.into_iter().filter(|item| item.snippet.is_some()).map(|item| {
             let snippet = item.snippet.unwrap();
-            SearchEntry {
+            SongEntry {
                 title: snippet.title.to_owned(),
                 id: item.id.video_id.to_owned()
             }
@@ -73,14 +73,14 @@ pub async fn search_song(input: &str) -> Result<Vec<SearchEntry>, String> {
     Ok(vec![])
 }
 
-pub async fn similar_songs(id: &str) -> Result<Vec<SearchEntry>, String> {
+pub async fn similar_songs(id: &str) -> Result<Vec<SongEntry>, String> {
     let key = get_api_key()?;
     let url = format!("https://youtube.googleapis.com/youtube/v3/search?part=snippet&order=relevance&type=video&key={}&maxResults=30&relatedToVideoId={}", key, id);
     let response = reqwest::get(&url).await.map_err(stringify_error)?;
     if let Ok(result) = response.json::<YoutubeSearchResult>().await {
         let entries = result.items.into_iter().filter(|item| item.snippet.is_some()).map(|item| {
             let snippet = item.snippet.unwrap();
-            SearchEntry {
+            SongEntry {
                 title: snippet.title.to_owned(),
                 id: item.id.video_id.to_owned()
             }
