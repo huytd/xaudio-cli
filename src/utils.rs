@@ -1,5 +1,5 @@
 use std::{time::Duration, fs::File, io::{BufReader, BufRead, Write}};
-use rand::Rng;
+use rand::prelude::*;
 use crate::youtube::SongEntry;
 
 pub const BACKSPACE_KEY: char = '\u{7f}';
@@ -75,12 +75,9 @@ pub fn save_playlist(playlist: &[SongEntry]) -> std::io::Result<()> {
 
 pub fn create_index_queue(len: usize, shuffle: bool) -> Vec<usize> {
     let mut rng = rand::thread_rng();
-    let mut ret = vec![];
-    while ret.len() < len {
-        let val = if shuffle { rng.gen_range(0..len) } else { *ret.last().unwrap_or(&0) };
-        if !ret.contains(&val) {
-            ret.push(val);
-        }
+    let mut ret: Vec<usize> = (0..len).collect();
+    if shuffle {
+        ret.shuffle(&mut rng);
     }
     return ret;
 }

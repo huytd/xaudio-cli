@@ -89,6 +89,7 @@ struct MusicApp {
     playing_index: usize,
     last_started: Instant,
     play_queue: Vec<usize>,
+    queue_index: usize,
     is_shuffle: bool
 }
 
@@ -110,6 +111,7 @@ impl MusicApp {
             last_started: Instant::now(),
             song_duration: Duration::default(),
             play_queue: create_index_queue(playlist_len, false),
+            queue_index: 0,
             is_shuffle: false
         }
     }
@@ -143,20 +145,22 @@ impl MusicApp {
     }
 
     fn play_next_song(&mut self) {
-        if self.selected_index < self.current_playlist.len() - 1 {
-            self.selected_index += 1;
+        if self.queue_index < self.play_queue.len() - 1 {
+            self.queue_index += 1;
         } else {
-            self.selected_index = 0;
+            // rebuild the play queue if needed
+            self.play_queue = create_index_queue(self.current_playlist.len(), self.is_shuffle);
+            self.queue_index = 0;
         }
+        self.selected_index = self.play_queue[self.queue_index];
         self.play_selected_song();
     }
 
     fn play_prev_song(&mut self) {
-        if self.selected_index > 0 {
-            self.selected_index -= 1;
-        } else {
-            self.selected_index = self.current_playlist.len() - 1;
+        if self.queue_index > 0 {
+            self.queue_index -= 1;
         }
+        self.selected_index = self.play_queue[self.queue_index];
         self.play_selected_song();
     }
 
@@ -169,7 +173,8 @@ impl MusicApp {
             let played_duration = display_time(Instant::now().duration_since(self.last_started));
             let total_duration = display_time(self.song_duration);
             let current_song = &self.current_playlist[self.playing_index];
-            win.mvprintw(0, 0, format!("▶ {} - {} / {}", truncate(&current_song.title, 60), played_duration, total_duration));
+            let shuffle_icon = if self.is_shuffle { "~" } else { "" };
+            win.mvprintw(0, 0, format!("▶{} {} - {} / {}", shuffle_icon, truncate(&current_song.title, 60), played_duration, total_duration));
         } else {
             win.mvprintw(0, 0, format!("{}", self.mode));
         }
@@ -181,7 +186,9 @@ impl MusicApp {
         let (screen_height, _) = win.get_max_yx();
         win.mv(screen_height - 1, 1);
         win.clrtoeol();
-        win.printw("[/] Search  [x] Remove  [Enter] Play  [n/p] Next/Prev Song  [Tab] Back to search");
+        win.printw(format!("[/] Search  [x] Remove  [Enter] Play  [n/p] Next/Prev  [s] Shuffle {}  [Tab] Back to search",
+            if self.is_shuffle { "ON" } else { "OFF" }
+        ));
     }
 
     fn draw_loading(&self, win: &Window) {
