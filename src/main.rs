@@ -45,6 +45,7 @@ enum Message {
     PlaySelected,
     NextSong,
     PrevSong,
+    ToggleShuffle,
     // Input box
     InputText(char),
     DeleteText,
@@ -86,7 +87,9 @@ struct MusicApp {
     song_duration: Duration,
     playing: bool,
     playing_index: usize,
-    last_started: Instant
+    last_started: Instant,
+    play_queue: Vec<usize>,
+    is_shuffle: bool
 }
 
 impl MusicApp {
@@ -104,7 +107,9 @@ impl MusicApp {
             playing: false,
             playing_index: 0,
             last_started: Instant::now(),
-            song_duration: Duration::default()
+            song_duration: Duration::default(),
+            play_queue: create_index_queue(&self.current_playlist, false),
+            is_shuffle: false
         }
     }
 
@@ -272,10 +277,12 @@ impl App for MusicApp {
                 let song = &self.search_results[selected_index];
                 self.current_playlist.push(song.to_owned());
                 _ = self.subscriber.try_send(Command::SavePlaylist(self.current_playlist.to_owned()));
+                self.play_queue = create_index_queue(&self.current_playlist, self.is_shuffle);
             },
             Message::RemoveSong => {
                 self.current_playlist.remove(self.selected_index);
                 _ = self.subscriber.try_send(Command::SavePlaylist(self.current_playlist.to_owned()));
+                self.play_queue = create_index_queue(&self.current_playlist, self.is_shuffle);
             },
             Message::NextPage => {
                 let list_len = if self.mode == AppMode::Playing { self.current_playlist.len() } else { self.search_results.len() };
@@ -329,6 +336,10 @@ impl App for MusicApp {
             Message::PrevSong => {
                 self.play_prev_song();
             },
+            Message::ToggleShuffle => {
+                self.is_shuffle = !self.is_shuffle;
+                self.play_queue = create_index_queue(&self.current_playlist, self.is_shuffle);
+            },
             Message::None => {},
         }
         return true;
@@ -348,6 +359,7 @@ impl App for MusicApp {
                     Input::Character('<') => Message::PrevPage,
                     Input::Character('n') => Message::NextSong,
                     Input::Character('p') => Message::PrevSong,
+                    Input::Character('s') => Message::ToggleShuffle,
                     _ => Message::None
                 }
             },

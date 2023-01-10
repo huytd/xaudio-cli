@@ -15,3 +15,4 @@ dotenv = "0.15.0"
 pancurses = { version = "0.17.0", features = ["wide"] }
 box_drawing = "0.1.2"
 regex = "1"
+rand = "*"
