@@ -463,7 +463,7 @@ async fn main() -> Result<()> {
     let (cmd_tx, cmd_rx) = tokio::sync::mpsc::channel::<Command>(1);
     let (msg_tx, msg_rx) = tokio::sync::mpsc::channel::<Message>(1);
 
-    let playlist = read_playlist()?;
+    let playlist = read_playlist().unwrap_or(vec![]);
     let app = MusicApp::new(playlist, cmd_tx);
     tokio::spawn(runtime(cmd_rx, msg_tx));
     run(app, false, msg_rx);
