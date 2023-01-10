@@ -10,7 +10,7 @@ use mpv::MpvClient;
 use pancurses::{Window, Input, COLOR_BLUE, init_pair, COLOR_WHITE};
 use tokio::{sync::mpsc::{Receiver, Sender}, select};
 use ui::{App, run};
-use utils::{ESCAPE_KEY, truncate, TITLE_PADDING, TAB_KEY, BACKSPACE_KEY, ENTER_KEY, get_total_pages, paginate, display_time};
+use utils::{ESCAPE_KEY, truncate, TITLE_PADDING, TAB_KEY, BACKSPACE_KEY, ENTER_KEY, get_total_pages, paginate, display_time, create_index_queue};
 use youtube::SongEntry;
 
 use crate::utils::{save_playlist, read_playlist};
@@ -94,6 +94,7 @@ struct MusicApp {
 
 impl MusicApp {
     pub fn new(playlist: Vec<SongEntry>, tx: Sender<Command>) -> Self {
+        let playlist_len = playlist.len();
         Self {
             mode: AppMode::Playing,
             current_playlist: playlist,
@@ -108,7 +109,7 @@ impl MusicApp {
             playing_index: 0,
             last_started: Instant::now(),
             song_duration: Duration::default(),
-            play_queue: create_index_queue(&self.current_playlist, false),
+            play_queue: create_index_queue(playlist_len, false),
             is_shuffle: false
         }
     }
@@ -277,12 +278,12 @@ impl App for MusicApp {
                 let song = &self.search_results[selected_index];
                 self.current_playlist.push(song.to_owned());
                 _ = self.subscriber.try_send(Command::SavePlaylist(self.current_playlist.to_owned()));
-                self.play_queue = create_index_queue(&self.current_playlist, self.is_shuffle);
+                self.play_queue = create_index_queue(self.current_playlist.len(), self.is_shuffle);
             },
             Message::RemoveSong => {
                 self.current_playlist.remove(self.selected_index);
                 _ = self.subscriber.try_send(Command::SavePlaylist(self.current_playlist.to_owned()));
-                self.play_queue = create_index_queue(&self.current_playlist, self.is_shuffle);
+                self.play_queue = create_index_queue(self.current_playlist.len(), self.is_shuffle);
             },
             Message::NextPage => {
                 let list_len = if self.mode == AppMode::Playing { self.current_playlist.len() } else { self.search_results.len() };
@@ -338,7 +339,7 @@ impl App for MusicApp {
             },
             Message::ToggleShuffle => {
                 self.is_shuffle = !self.is_shuffle;
-                self.play_queue = create_index_queue(&self.current_playlist, self.is_shuffle);
+                self.play_queue = create_index_queue(self.current_playlist.len(), self.is_shuffle);
             },
             Message::None => {},
         }
