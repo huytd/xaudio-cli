@@ -115,3 +115,29 @@ is needed. For a full list of commands/events, please check the following links:
 - https://mpv.io/manual/stable/#list-of-events
 
 The implementation's of [src/mpv.rs](src/mpv.rs) module are heavily inspired by the @joleeee's [mpvi](https://github.com/joleeee/mpvi) project.
+
+## Song shuffling
+
+Song shuffling is a very interesting problem.
+
+The simplest way to implement song shuffling is to generate a random index everytime the user switch to a next or previous song.
+There are a couple of problems with this approach:
+
+- The user cannot go back to the previous song because the index is randomized on every action
+- Related to the above point, there's no way to track the listening history
+- It is very likely that some songs will be played more than once, while some songs will never get played
+
+For a better approach, we will keep the list of songs to play in a list called `play_queue`. This queue is built by shuffling around the
+index of the songs, with the help of the `rand` crate:
+
+```rust
+let mut rng = rand::thread_rng();
+let mut play_queue: Vec<usize> = (0..len).collect();
+if shuffle {
+    play_queue.shuffle(&mut rng);
+}
+```
+
+By doing this, we will always have a list of song ids shuffled in either random or linear order depending on the play mode (`is_shuffle: bool`).
+
+And with this approach, we will be able to implement the three points mentioned above: we can keep track of the played song, so we can implement the next/prev feature correctly, and all songs in the playlist are guaranteed to be played at least once per shuffle session.
