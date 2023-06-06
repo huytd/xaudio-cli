@@ -1,19 +1,31 @@
+mod mpv;
+mod ui;
 mod utils;
 mod youtube;
-mod ui;
-mod mpv;
 
-use std::{io::Result, fmt::Display, collections::HashSet, thread, time::{Duration, Instant}};
 use box_drawing::light::HORIZONTAL;
 use dotenv::dotenv;
 use mpv::MpvClient;
-use pancurses::{Window, Input, COLOR_BLUE, init_pair, COLOR_WHITE};
-use tokio::{sync::mpsc::{Receiver, Sender}, select};
-use ui::{App, run};
-use utils::{ESCAPE_KEY, truncate, TITLE_PADDING, TAB_KEY, BACKSPACE_KEY, ENTER_KEY, get_total_pages, paginate, display_time, create_index_queue};
+use pancurses::{init_pair, Input, Window, COLOR_BLUE, COLOR_WHITE};
+use std::{
+    collections::HashSet,
+    fmt::Display,
+    io::Result,
+    thread,
+    time::{Duration, Instant},
+};
+use tokio::{
+    select,
+    sync::mpsc::{Receiver, Sender},
+};
+use ui::{run, App};
+use utils::{
+    create_index_queue, display_time, get_total_pages, paginate, truncate, BACKSPACE_KEY,
+    ENTER_KEY, ESCAPE_KEY, TAB_KEY, TITLE_PADDING,
+};
 use youtube::SongEntry;
 
-use crate::utils::{save_playlist, read_playlist};
+use crate::utils::{read_playlist, save_playlist};
 
 // TODO:
 // 1. BUG - Add duplicate item into playlist
@@ -24,7 +36,7 @@ use crate::utils::{save_playlist, read_playlist};
 enum Command {
     Search(String),
     Play(String),
-    SavePlaylist(Vec<SongEntry>)
+    SavePlaylist(Vec<SongEntry>),
 }
 
 #[derive(Debug)]
@@ -55,14 +67,14 @@ enum Message {
     SongStopped(String),
     SongDuration(Duration),
     // Other
-    None
+    None,
 }
 
 #[derive(PartialEq, Eq)]
 enum AppMode {
     Playing,
     SearchInput,
-    SearchBrowse
+    SearchBrowse,
 }
 
 impl Display for AppMode {
@@ -90,7 +102,7 @@ struct MusicApp {
     last_started: Instant,
     play_queue: Vec<usize>,
     queue_index: usize,
-    is_shuffle: bool
+    is_shuffle: bool,
 }
 
 impl MusicApp {
@@ -112,7 +124,7 @@ impl MusicApp {
             song_duration: Duration::default(),
             play_queue: create_index_queue(playlist_len, false),
             queue_index: 0,
-            is_shuffle: false
+            is_shuffle: false,
         }
     }
 
@@ -166,7 +178,9 @@ impl MusicApp {
 
     fn draw_base_ui(&self, win: &Window) {
         let (screen_height, screen_width) = win.get_max_yx();
-        let horizontal_line = std::iter::repeat(HORIZONTAL).take(screen_width as usize).collect::<String>();
+        let horizontal_line = std::iter::repeat(HORIZONTAL)
+            .take(screen_width as usize)
+            .collect::<String>();
         win.mv(0, 0);
         win.clrtoeol();
         if self.playing {
@@ -174,7 +188,17 @@ impl MusicApp {
             let total_duration = display_time(self.song_duration);
             let current_song = &self.current_playlist[self.playing_index];
             let shuffle_icon = if self.is_shuffle { "~" } else { "" };
-            win.mvprintw(0, 0, format!("▶{} {} - {} / {}", shuffle_icon, truncate(&current_song.title, 60), played_duration, total_duration));
+            win.mvprintw(
+                0,
+                0,
+                format!(
+                    "▶{} {} - {} / {}",
+                    shuffle_icon,
+                    truncate(&current_song.title, 60),
+                    played_duration,
+                    total_duration
+                ),
+            );
         } else {
             win.mvprintw(0, 0, format!("{}", self.mode));
         }
@@ -213,9 +237,12 @@ impl MusicApp {
     }
 
     fn draw_list(&self, list: &[SongEntry], exclude_list: &[SongEntry], win: &Window) {
-        let excluded_ids = exclude_list.iter().map(|entry| entry.id.to_owned()).collect::<HashSet<String>>();
+        let excluded_ids = exclude_list
+            .iter()
+            .map(|entry| entry.id.to_owned())
+            .collect::<HashSet<String>>();
         let (_, screen_width) = win.get_max_yx();
-        let total_pages = get_total_pages(list.len(),self.page_display_size);
+        let total_pages = get_total_pages(list.len(), self.page_display_size);
         let page = paginate(&list, self.current_page, self.page_display_size);
 
         // clear previous list
@@ -236,7 +263,11 @@ impl MusicApp {
                     attr_flag |= pancurses::COLOR_PAIR(1);
                 }
                 win.attron(attr_flag);
-                win.printw(format!("{}. {}\n", i + 1 + self.current_page * self.page_display_size, truncate(&item.title, screen_width as usize - TITLE_PADDING)));
+                win.printw(format!(
+                    "{}. {}\n",
+                    i + 1 + self.current_page * self.page_display_size,
+                    truncate(&item.title, screen_width as usize - TITLE_PADDING)
+                ));
                 win.attroff(attr_flag);
             }
             win.printw(format!("Page: {}/{}\n", self.current_page + 1, total_pages));
@@ -263,92 +294,103 @@ impl App for MusicApp {
                 self.search_results = result;
                 self.switch_mode(AppMode::SearchBrowse, win);
                 self.loading = false;
-            },
+            }
             Message::GoToSearch => {
                 self.switch_mode(AppMode::SearchInput, win);
                 self.input_clear(win);
-            },
+            }
             Message::GoToSearchBrowse => {
                 self.switch_mode(AppMode::SearchBrowse, win);
-            },
+            }
             Message::GoToPlaylist => {
                 self.switch_mode(AppMode::Playing, win);
-            },
+            }
             Message::SearchSong => {
                 if self.keyword.trim().len() > 0 {
-                    _ = self.subscriber.try_send(Command::Search(self.keyword.clone()));
+                    _ = self
+                        .subscriber
+                        .try_send(Command::Search(self.keyword.clone()));
                     self.loading = true;
                 }
-            },
+            }
             Message::AddSelectedToPlaylist => {
-                let selected_index = self.selected_index + self.current_page * self.page_display_size;
+                let selected_index =
+                    self.selected_index + self.current_page * self.page_display_size;
                 let song = &self.search_results[selected_index];
                 self.current_playlist.push(song.to_owned());
-                _ = self.subscriber.try_send(Command::SavePlaylist(self.current_playlist.to_owned()));
+                _ = self
+                    .subscriber
+                    .try_send(Command::SavePlaylist(self.current_playlist.to_owned()));
                 self.play_queue = create_index_queue(self.current_playlist.len(), self.is_shuffle);
-            },
+            }
             Message::RemoveSong => {
                 self.current_playlist.remove(self.selected_index);
-                _ = self.subscriber.try_send(Command::SavePlaylist(self.current_playlist.to_owned()));
+                _ = self
+                    .subscriber
+                    .try_send(Command::SavePlaylist(self.current_playlist.to_owned()));
                 self.play_queue = create_index_queue(self.current_playlist.len(), self.is_shuffle);
-            },
+            }
             Message::NextPage => {
-                let list_len = if self.mode == AppMode::Playing { self.current_playlist.len() } else { self.search_results.len() };
+                let list_len = if self.mode == AppMode::Playing {
+                    self.current_playlist.len()
+                } else {
+                    self.search_results.len()
+                };
                 let total_pages = get_total_pages(list_len, self.page_display_size);
                 if self.current_page < total_pages - 1 {
                     self.current_page += 1;
                 }
                 self.selected_index = 0;
-            },
+            }
             Message::PrevPage => {
                 if self.current_page > 0 {
                     self.current_page -= 1;
                 }
                 self.selected_index = 0;
-            },
+            }
             Message::NextItem => {
                 if self.selected_index < self.page_display_size - 1 {
                     self.selected_index += 1;
                 }
-            },
+            }
             Message::PrevItem => {
                 if self.selected_index > 0 {
                     self.selected_index -= 1;
                 }
-            },
+            }
             Message::InputText(ch) => {
                 self.keyword.push(ch);
-            },
+            }
             Message::DeleteText => {
                 self.input_pop_last(win);
-            },
+            }
             Message::PlaySelected => {
                 self.play_selected_song();
-            },
+            }
             Message::SongStarted(current_time) => {
                 self.playing = true;
                 self.last_started = current_time;
-            },
+            }
             Message::SongStopped(reason) => {
                 self.playing = false;
                 if reason.eq("eof") {
                     self.play_next_song();
                 }
-            },
+            }
             Message::SongDuration(duration) => {
                 self.song_duration = duration;
-            },
+            }
             Message::NextSong => {
                 self.play_next_song();
-            },
+            }
             Message::PrevSong => {
                 self.play_prev_song();
-            },
+            }
             Message::ToggleShuffle => {
                 self.is_shuffle = !self.is_shuffle;
                 self.play_queue = create_index_queue(self.current_playlist.len(), self.is_shuffle);
-            },
-            Message::None => {},
+            }
+            Message::None => {}
         }
         return true;
     }
@@ -368,18 +410,18 @@ impl App for MusicApp {
                     Input::Character('n') => Message::NextSong,
                     Input::Character('p') => Message::PrevSong,
                     Input::Character('s') => Message::ToggleShuffle,
-                    _ => Message::None
+                    _ => Message::None,
                 }
-            },
+            }
             AppMode::SearchInput => {
                 return match input {
                     Input::Character(ESCAPE_KEY) => Message::GoToPlaylist,
                     Input::Character(BACKSPACE_KEY) => Message::DeleteText,
                     Input::Character(ENTER_KEY) => Message::SearchSong,
                     Input::Character(ch) => Message::InputText(ch),
-                    _ => Message::None
+                    _ => Message::None,
                 }
-            },
+            }
             AppMode::SearchBrowse => {
                 return match input {
                     Input::Character(ESCAPE_KEY) | Input::Character('q') => Message::GoToPlaylist,
@@ -389,7 +431,7 @@ impl App for MusicApp {
                     Input::Character('j') => Message::NextItem,
                     Input::Character('k') => Message::PrevItem,
                     Input::Character(ENTER_KEY) => Message::AddSelectedToPlaylist,
-                    _ => Message::None
+                    _ => Message::None,
                 }
             }
         }
@@ -458,7 +500,10 @@ async fn runtime(mut rx: Receiver<Command>, tx: Sender<Message>) {
                         mpv::MpvEvent::EndFile(reason) => {
                             _ = tx.send(Message::SongStopped(reason)).await;
                         },
-                        mpv::MpvEvent::Unknown(_event) => {}
+                        _ => {}
+                        // mpv::MpvEvent::Unknown(_event) => {
+                        //     println!("UNKNOWN: {:?}", _event);
+                        // }
                     }
                 }
             }

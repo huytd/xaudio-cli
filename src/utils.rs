@@ -1,6 +1,10 @@
-use std::{time::Duration, fs::File, io::{BufReader, BufRead, Write}};
-use rand::prelude::*;
 use crate::youtube::SongEntry;
+use rand::prelude::*;
+use std::{
+    fs::File,
+    io::{BufRead, BufReader, Write},
+    time::Duration,
+};
 
 pub const BACKSPACE_KEY: char = '\u{7f}';
 pub const ESCAPE_KEY: char = '\u{1b}';
@@ -56,7 +60,7 @@ pub fn read_playlist() -> std::io::Result<Vec<SongEntry>> {
         if let Some((id, title)) = line.split_once(" - ") {
             result.push(SongEntry {
                 id: id.to_owned(),
-                title: title.trim().to_owned()
+                title: title.trim().to_owned(),
             });
         }
         line.clear();
@@ -67,9 +71,12 @@ pub fn read_playlist() -> std::io::Result<Vec<SongEntry>> {
 pub fn save_playlist(playlist: &[SongEntry]) -> std::io::Result<()> {
     let file_name = format!("{}{}", HOME_DIR, PLAYLIST_FILE_PATH);
     let mut file = File::create(file_name)?;
-    playlist.iter().map(|song| format!("{} - {}", song.id, song.title)).for_each(|line| {
-        _ = writeln!(file, "{}", line);
-    });
+    playlist
+        .iter()
+        .map(|song| format!("{} - {}", song.id, song.title))
+        .for_each(|line| {
+            _ = writeln!(file, "{}", line);
+        });
     Ok(())
 }
 
