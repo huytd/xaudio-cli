@@ -153,7 +153,7 @@ impl MusicApp {
         let selected_index = self.selected_index + self.current_page * self.page_display_size;
         let song = &self.current_playlist[selected_index];
         _ = self.subscriber.try_send(Command::Play(song.id.to_owned()));
-        self.playing_index = self.selected_index;
+        self.playing_index = selected_index;
     }
 
     fn play_next_song(&mut self) {
