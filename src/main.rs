@@ -27,11 +27,6 @@ use youtube::SongEntry;
 
 use crate::utils::{read_playlist, save_playlist};
 
-// TODO:
-// 1. BUG - Add duplicate item into playlist
-// 2. FEA - Support multiple playlists
-// 3. FEA - Shuffle Songs
-
 #[derive(Debug)]
 enum Command {
     Search(String),
@@ -124,7 +119,7 @@ impl MusicApp {
             song_duration: Duration::default(),
             play_queue: create_index_queue(playlist_len, false),
             queue_index: 0,
-            is_shuffle: false,
+            is_shuffle: true,
         }
     }
 
